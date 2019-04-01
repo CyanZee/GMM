@@ -13,6 +13,9 @@
 #include <vector>
 #include <time.h>
 
+#include <unistd.h> //binding of threads to cpu cores include
+
+
 using namespace cv;
 using namespace std;
 //using namespace cuda;
@@ -41,6 +44,32 @@ PixelGMM* ppgmm;
 
 int main(int argc, char *argv[])
 {
+	#if 1
+	//Binding of threads to CPU cores
+	cpu_set_t mask;
+	cpu_set_t get;
+	int num = sysconf(_SC_NPROCESSORS_CONF);
+	printf("system has %d processors \n", num);
+	
+	CPU_ZERO(&mask);
+	CPU_SET(0, &mask);
+	if(pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask) < 0)
+	{
+		printf("set thread affinity failed\n");
+	}
+	CPU_ZERO(&get);
+	if(pthread_getaffinity_np(pthread_self(), sizeof(get), &get) < 0)
+	{
+		printf("get thread affinity failed\n");
+	}
+	for(int j = 0; j < num; j++)
+	{
+		if(CPU_ISSET(j, &get))
+		{	
+			printf("thread %d is running in processor %d\n", (int)pthread_self(),j);
+		}
+	}
+	#endif
 	clock_t startTime,endTime;
 	startTime = clock();
 	int num_device = cuda::getCudaEnabledDeviceCount();
