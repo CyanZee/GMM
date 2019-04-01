@@ -6,6 +6,7 @@
 #include <opencv2/video/background_segm.hpp>
 //#include <opencv2/core/mat.hpp>
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaimgproc.hpp>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <numeric>
@@ -14,6 +15,7 @@
 
 using namespace cv;
 using namespace std;
+//using namespace cuda;
 
 struct GaussianDistribution
 {
@@ -56,7 +58,7 @@ int main(int argc, char *argv[])
 			enable_device_id = i;
 		}
 	}
-	cout << "enable_device_id = " << enable_device_id << endl;
+	//cout << "enable_device_id = " << enable_device_id << endl;
 	if(enable_device_id < 0)
 	{
 		cerr << "GPU module is not compatible." << endl;
@@ -80,8 +82,9 @@ int main(int argc, char *argv[])
 	cudaFree(0);
 	
 	VideoCapture capture("video.avi");
-	Ptr<BackgroundSubtractorMOG2> bg_model = createBackgroundSubtractorMOG2(100,SIGMA,false);
+	Ptr<cuda::BackgroundSubtractorMOG2> bg_model = cuda::createBackgroundSubtractorMOG2(100,SIGMA,false);
 	Mat rate, image, fgimage, fgmask;
+	cuda::GpuMat gpu_image, gpu_fgmask, gpu_bgimage;
 	bg_model->setVarThreshold(20);
 	cv::Size s;
 	s.width = 860; 
@@ -100,27 +103,24 @@ int main(int argc, char *argv[])
 			//return -1;
 			break;
 		}
-		resize(rate, image, s, INTER_CUBIC);
+		cv::resize(rate, image, s, INTER_CUBIC);
 
 		if (fgimage.empty())
                 fgimage.create(image.size(), image.type());
 
-		//cuda::GpuMat gpu_image(image);
-		//cuda::GpuMat gpu_fgmask;
+		
+		gpu_image.upload(image);
             	//bg_model->apply(image, fgmask, ALPHA);
-            	//bg_model->apply(gpu_image, gpu_fgmask, ALPHA);
-		cv::_InputArray inArray(image);
-		cv::_OutputArray outArray(fgmask);
-            	bg_model->apply(inArray, outArray, ALPHA);
-		//Mat dst;
-		//gpu_fgmask.download(outArray);
-		fgmask = outArray.getMat();
-		//gpu_fgmask.download(fgmask);
+            	bg_model->apply(gpu_image, gpu_fgmask, ALPHA);
+		gpu_fgmask.download(fgmask);
 
             	fgimage = Scalar::all(0);
             	image.copyTo(fgimage, fgmask);
-            Mat bgimage;
-            	bg_model->getBackgroundImage(bgimage);
+		Mat bgimage;
+		
+            	//bg_model->getBackgroundImage(bgimage);
+            	bg_model->getBackgroundImage(gpu_bgimage);
+		gpu_bgimage.download(bgimage);
 		
 		Mat temp;
 		
@@ -168,13 +168,13 @@ int main(int argc, char *argv[])
 			drawContours(fgimage, contours, -1, color, CV_FILLED, 8, hierarchy);
 		}
 
-		//imshow("image", image);
-            	//imshow("fgimage", fgimage);
-            	//imshow("fgmask", fgmask);
-            	//if (!bgimage.empty())
-               		//imshow("bgimage", bgimage);
+		imshow("image", image);
+            	imshow("fgimage", fgimage);
+            	imshow("fgmask", fgmask);
+            	if (!bgimage.empty())
+               		imshow("bgimage", bgimage);
 
-            	//waitKey(30);
+            	waitKey(30);
 	}
 	endTime = clock();
 	double duration = (double)(endTime - startTime) / CLOCKS_PER_SEC;
